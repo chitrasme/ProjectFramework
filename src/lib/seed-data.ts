@@ -33,7 +33,7 @@ async function storeLocal(key: string, data: Buffer) {
     const bucket = process.env.SUPABASE_BUCKET || "projecttrack";
     const res = await fetch(`${url}/storage/v1/object/${bucket}/${key}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+      headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!, "Content-Type": "application/pdf", "x-upsert": "true" },
       body: new Uint8Array(data),
     });
     if (!res.ok) throw new Error(`Supabase upload failed: ${res.status} ${await res.text()}`);

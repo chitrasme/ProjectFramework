@@ -31,7 +31,7 @@ export async function putFile(key: string, data: Buffer, contentType: string) {
     const s = supa();
     const res = await fetch(`${s.url}/storage/v1/object/${s.bucket}/${key}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${s.key}`, "Content-Type": contentType || "application/octet-stream", "x-upsert": "false" },
+      headers: { Authorization: `Bearer ${s.key}`, apikey: s.key, "Content-Type": contentType || "application/octet-stream", "x-upsert": "false" },
       body: new Uint8Array(data),
     });
     if (!res.ok) throw new Error(`Upload failed: ${res.status} ${await res.text()}`);
@@ -46,7 +46,7 @@ export async function putFile(key: string, data: Buffer, contentType: string) {
 export async function getFile(key: string): Promise<Buffer> {
   if (driver() === "supabase") {
     const s = supa();
-    const res = await fetch(`${s.url}/storage/v1/object/${s.bucket}/${key}`, { headers: { Authorization: `Bearer ${s.key}` } });
+    const res = await fetch(`${s.url}/storage/v1/object/${s.bucket}/${key}`, { headers: { Authorization: `Bearer ${s.key}`, apikey: s.key } });
     if (!res.ok) throw new Error(`Download failed: ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
   }
@@ -61,7 +61,7 @@ export async function deleteFile(key: string) {
       const s = supa();
       await fetch(`${s.url}/storage/v1/object/${s.bucket}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${s.key}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${s.key}`, apikey: s.key, "Content-Type": "application/json" },
         body: JSON.stringify({ prefixes: [key] }),
       });
       return;
