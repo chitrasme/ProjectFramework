@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: projecttrack
+          POSTGRES_PASSWORD: projecttrack
+          POSTGRES_DB: projecttrack
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U projecttrack" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://projecttrack:projecttrack@localhost:5432/projecttrack
+      DIRECT_URL: postgresql://projecttrack:projecttrack@localhost:5432/projecttrack
+      AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-secret-ci
+      TEST_DATABASE_SERVER: postgresql://projecttrack:projecttrack@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

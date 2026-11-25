@@ -1,0 +1,251 @@
+// ProjectTrack – Final Year Project Management System
+// PostgreSQL schema (works with local Postgres or Supabase Postgres)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  STUDENT
+  GUIDE
+  HOD
+}
+
+enum ProjectStatus {
+  PROPOSED
+  ACTIVE
+  COMPLETED
+  REJECTED
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  department   String   @default("Computer Science")
+  rollNo       String?  @unique
+  phone        String?
+  // Demo accounts and everything they create are kept apart from real data.
+  isDemo       Boolean  @default(false)
+  active       Boolean  @default(true)
+  mustChangePassword Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   TeamMember[]
+  guidedProjects Project[]       @relation("ProjectGuide")
+  submissions   Submission[]    @relation("SubmissionUploader")
+  reviews       Submission[]    @relation("SubmissionReviewer")
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  events        CalendarEvent[]
+  extensions    DeadlineExtension[]
+  remarks       Remark[]
+
+  @@index([role, isDemo])
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  label     String // e.g. "2026-27"
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  isDemo    Boolean  @default(false)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  stages   Stage[]
+  projects Project[]
+  events   CalendarEvent[]
+
+  @@unique([label, isDemo])
+}
+
+model Stage {
+  id               String       @id @default(cuid())
+  academicYearId   String
+  academicYear     AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  order            Int
+  name             String
+  description      String       @default("")
+  deadline         DateTime?
+  requiresDocument Boolean      @default(true)
+  allowedTypes     String       @default(".pdf,.doc,.docx,.ppt,.pptx,.zip")
+  maxMarks         Int          @default(0)
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+
+  submissions Submission[]
+  extensions  DeadlineExtension[]
+  reminders   ReminderLog[]
+
+  @@unique([academicYearId, order])
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  academicYearId String
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  teamName       String
+  title          String
+  abstract       String        @default("")
+  domain         String        @default("")
+  technologies   String        @default("")
+  guideId        String?
+  guide          User?         @relation("ProjectGuide", fields: [guideId], references: [id], onDelete: SetNull)
+  status         ProjectStatus @default(PROPOSED)
+  isDemo         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  members     TeamMember[]
+  submissions Submission[]
+  extensions  DeadlineExtension[]
+  events      CalendarEvent[]
+  reminders   ReminderLog[]
+  remarks     Remark[]
+
+  @@index([academicYearId, isDemo])
+  @@index([guideId])
+}
+
+model TeamMember {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLeader  Boolean @default(false)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model Submission {
+  id            String           @id @default(cuid())
+  projectId     String
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId       String
+  stage         Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  version       Int
+  fileKey       String?
+  fileName      String?
+  mimeType      String?
+  fileSize      Int?
+  note          String           @default("")
+  uploadedById  String
+  uploadedBy    User             @relation("SubmissionUploader", fields: [uploadedById], references: [id])
+  isLate        Boolean          @default(false)
+  status        SubmissionStatus @default(PENDING)
+  reviewedById  String?
+  reviewedBy    User?            @relation("SubmissionReviewer", fields: [reviewedById], references: [id])
+  reviewComment String?
+  marks         Int?
+  reviewedAt    DateTime?
+  createdAt     DateTime         @default(now())
+
+  @@unique([projectId, stageId, version])
+  @@index([status])
+}
+
+model DeadlineExtension {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId     String
+  stage       Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  newDeadline DateTime
+  reason      String   @default("")
+  grantedById String
+  grantedBy   User     @relation(fields: [grantedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([projectId, stageId])
+}
+
+model Remark {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model CalendarEvent {
+  id             String       @id @default(cuid())
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title          String
+  description    String       @default("")
+  startsAt       DateTime
+  kind           String       @default("EVENT") // EVENT | REVIEW | MEETING | HOLIDAY
+  createdById    String
+  createdBy      User         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  link      String?
+  kind      String   @default("INFO")
+  read      Boolean  @default(false)
+  emailed   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model ReminderLog {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId   String
+  stage     Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  kind      String // DUE_3D | DUE_1D | OVERDUE
+  sentAt    DateTime @default(now())
+
+  @@unique([projectId, stageId, kind])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
