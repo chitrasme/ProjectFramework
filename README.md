@@ -69,24 +69,18 @@ docker run -d --name pt-db -e POSTGRES_USER=projecttrack -e POSTGRES_PASSWORD=pr
 
 ---
 
-## Deploy: Supabase + Vercel (free tiers)
+## Deploy: Supabase + Vercel (free tiers, browser only)
 
-1. **Supabase**: create a project at supabase.com.
-   - *Project Settings → Database → Connection string*: copy the **Transaction pooler** URI (port 6543) as `DATABASE_URL` and add `?pgbouncer=true&connection_limit=1`. Copy the **Direct connection** URI (port 5432) as `DIRECT_URL`.
-   - *Storage*: create a **private** bucket named `projecttrack`.
-   - *Project Settings → API*: copy the project URL (`SUPABASE_URL`) and the `service_role` key (`SUPABASE_SERVICE_ROLE_KEY`). This key stays on the server only. Never expose it to the browser.
-2. **Create the tables and first data** from your computer, using the Supabase URLs in `.env`:
-   ```bash
-   npx prisma migrate deploy
-   SKIP_DEMO=true npm run db:seed     # or plain `npm run db:seed` to include demo accounts
-   npm run create-hod -- --email ... --name ... --password ...
-   ```
-3. **Vercel**: import the GitHub repository and add these environment variables:
-   `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET` (run `openssl rand -hex 32`), `APP_URL` (your Vercel URL), `STORAGE_DRIVER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET=projecttrack`, `CRON_SECRET` (random), `DEMO_MODE=false`, and optionally the SMTP settings.
-   The build command is `npm run build` (it runs `prisma generate`).
-4. **Reminders**: `vercel.json` schedules `/api/cron/reminders` daily at 02:30 UTC (08:00 IST). Vercel sends `CRON_SECRET` automatically. On any other host, call it from cron:
-   `curl -H "Authorization: Bearer $CRON_SECRET" https://your-app/api/cron/reminders`
-5. **Uploads larger than ~4 MB on Vercel**: Vercel limits request bodies to about 4.5 MB per request. For bigger files (for example code archives), host on a Node server such as Render, Railway, a college VM or Docker, where the `MAX_UPLOAD_MB` limit (default 25) applies.
+No local tools are needed. Vercel creates the database tables on every build (`vercel-build` runs `prisma migrate deploy`), and the first HOD account is created on the one-time `/setup` page.
+
+1. **Supabase**: create a project. Under *Connect*, copy the **Transaction pooler** URI (port 6543) and add `?pgbouncer=true&connection_limit=1` to make `DATABASE_URL`. Copy the **Session pooler** URI (port 5432) as `DIRECT_URL`. Under *Storage*, create a **private** bucket named `projecttrack`. Under *Project Settings → API Keys*, copy the project URL and the `service_role` (secret) key.
+2. **Vercel**: import the GitHub repository and add these environment variables:
+   `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET` (random, 32+ characters), `SETUP_TOKEN` (random), `CRON_SECRET` (random), `STORAGE_DRIVER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET=projecttrack`, `MAX_UPLOAD_MB=4`, `DEMO_MODE=true` (or `false`), and optionally the `SMTP_*` settings. Then deploy.
+3. Open `https://<your-app>.vercel.app/setup`, enter the `SETUP_TOKEN`, and create the HOD account. You can optionally load the demo accounts at the same time. The page closes itself afterwards.
+4. **Reminders**: `vercel.json` schedules `/api/cron/reminders` daily at 02:30 UTC (08:00 IST). Vercel sends `CRON_SECRET` automatically. On another host, call it with `curl -H "Authorization: Bearer $CRON_SECRET" https://your-app/api/cron/reminders`.
+5. **Upload size**: Vercel limits request bodies to about 4.5 MB, so keep `MAX_UPLOAD_MB=4` there. For larger files, such as code archives, host on a Node server (Render, Railway, a college VM or Docker), where `MAX_UPLOAD_MB` can be 25 or more.
+
+Command-line alternative: `npx prisma migrate deploy`, `npm run db:seed`, and `npm run create-hod -- --email … --name … --password …`, run with the Supabase URLs in `.env`.
 
 ### Deploy on your own server (college VM)
 ```bash
@@ -113,14 +107,14 @@ With `STORAGE_DRIVER=local`, files go to `UPLOAD_DIR`. Back that folder up along
 npm test            # unit tests: stage states, deadlines, extensions, progress, access rules, timezone handling
 npm run build && npm run test:e2e
 ```
-The end-to-end suite starts the production server against a **new temporary database** (`projecttrack_e2e_<timestamp>`, dropped afterwards) and drives a real Chromium browser through 37 checks:
+The end-to-end suite starts the production server against a **new temporary database** (`projecttrack_e2e_<timestamp>`, dropped afterwards) and drives a real Chromium browser through 38 checks:
 - **Role isolation**: students and guides get 404 for other teams' pages, files and reports, and HOD pages and APIs are blocked for other roles.
 - **Uploads**: a disallowed file type is refused, a revised version is accepted, and uploads are locked while a review is pending.
 - **Reviews**: a comment is required to request changes, marks are capped at the stage maximum, approving unlocks the next stage, and the team is notified.
 - **Deadlines**: per-team extensions are entered in IST, HOD deadline edits notify teams, and the reminder job runs only once per stage.
 - **Exports**: the Excel workbook's structure, the PDF reports, and a backup with no password hashes.
 - **Demo/real separation**: a demo student cannot join a real team, and the demo HOD cannot open a real project.
-- **Account lifecycle**: CSV import, forced password change, and deactivation.
+- **Account lifecycle**: one-time setup page with a token, CSV import, forced password change, and deactivation.
 
 It needs PostgreSQL. Point `TEST_DATABASE_SERVER` at a server where your user may create databases (default: local `projecttrack` user). GitHub Actions runs everything on every push (`.github/workflows/ci.yml`).
 

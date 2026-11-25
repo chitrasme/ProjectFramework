@@ -24,7 +24,7 @@ const UPLOADS = path.resolve(".test-uploads");
 const SHOTS = process.env.E2E_SCREENSHOTS;
 const env = {
   ...process.env, DATABASE_URL: DB, DIRECT_URL: DB, UPLOAD_DIR: UPLOADS, STORAGE_DRIVER: "local", DEMO_MODE: "true",
-  AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-e2e-secret", CRON_SECRET: "e2e-cron", APP_URL: BASE, SMTP_HOST: "", PORT: String(PORT), NODE_ENV: "production",
+  AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-e2e-secret", CRON_SECRET: "e2e-cron", SETUP_TOKEN: "e2e-setup-token", APP_URL: BASE, SMTP_HOST: "", PORT: String(PORT), NODE_ENV: "production",
 };
 
 const results = [];
@@ -48,7 +48,6 @@ const admin = new AdminClient({ datasources: { db: { url: SERVER.href } } });
 await admin.$executeRawUnsafe(`CREATE DATABASE "${DB_NAME}"`);
 execSync("npx prisma migrate deploy", { env, stdio: "pipe" });
 execSync("npx tsx prisma/seed.ts", { env, stdio: "pipe" });
-execSync(`npx tsx scripts/create-hod.ts --email realhod@college.test --name "Real HOD" --password "RealHod#2026"`, { env, stdio: "pipe" });
 
 console.log("Starting server…");
 try {
@@ -99,6 +98,36 @@ try {
   const pulse = await proj("Team Pulse");
   const orbitFile = await db.submission.findFirstOrThrow({ where: { projectId: orbit.id, fileKey: { not: null } } });
   const demoYear = await db.academicYear.findFirstOrThrow({ where: { isDemo: true } });
+
+  console.log("\nFirst-time setup");
+  await test("setup page refuses a wrong token, then creates the real HOD once", async () => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/login`);
+    await page.getByText("First time here?").click();
+    await page.waitForURL(/\/setup/);
+    await page.fill("#token", "wrong");
+    await page.fill("#name", "Real HOD");
+    await page.fill("#email", "realhod@college.test");
+    await page.fill("#password", "RealHod#2026");
+    await page.fill("#confirm", "RealHod#2026");
+    await page.uncheck("input[name=demo]");
+    await btn(page, "Create HOD account").click();
+    await alert(page).waitFor();
+    assert.match(await alert(page).textContent(), /setup token is wrong/);
+    await page.fill("#token", "e2e-setup-token");
+    await Promise.all([page.waitForURL(/\/hod/), btn(page, "Create HOD account").click()]);
+    await page.getByText("Department dashboard").waitFor();
+    const r = await page.goto(`${BASE}/setup`);
+    assert.equal(r.status(), 404);
+    await page.goto(`${BASE}/login`);
+    await ctx.close();
+    const anon = await browser.newContext();
+    const p2 = await anon.newPage();
+    await p2.goto(`${BASE}/login`);
+    assert.equal(await p2.getByText("First time here?").count(), 0);
+    await anon.close();
+  });
 
   console.log("\nAuthentication");
   await test("rejects a wrong password", async () => {

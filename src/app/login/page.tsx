@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, homeFor } from "@/lib/session";
 import { LoginForm } from "./login-form";
+import { setupIsOpen } from "@/app/actions/setup";
 
 export const metadata = { title: "Sign in" };
 
@@ -8,6 +9,7 @@ export default async function LoginPage() {
   const user = await getCurrentUser();
   if (user) redirect(homeFor(user.role));
   const demo = process.env.DEMO_MODE === "true";
+  const firstRun = await setupIsOpen();
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="hidden flex-col justify-between bg-brand p-10 text-white lg:flex">
@@ -27,6 +29,11 @@ export default async function LoginPage() {
         <div className="w-full max-w-sm">
           <h2 className="text-2xl font-semibold">Sign in</h2>
           <p className="mt-1 text-sm text-muted">Use the account given to you by your department.</p>
+          {firstRun && (
+            <a href="/setup" className="mt-4 block rounded-md border border-brand/30 bg-brand-soft px-3 py-2 text-sm text-brand hover:underline">
+              First time here? Create the Head of Department account →
+            </a>
+          )}
           <LoginForm demo={demo} />
         </div>
       </div>
