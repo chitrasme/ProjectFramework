@@ -9,7 +9,15 @@ import { LogOut } from "lucide-react";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const unread = await unreadCount(user.id);
+  // One round of parallel queries for the sidebar badges.
+  const [unread, badge] = await Promise.all([
+    unreadCount(user.id),
+    user.role === "GUIDE"
+      ? prisma.submission.count({ where: { status: "PENDING", project: { guideId: user.id, isDemo: user.isDemo } } })
+      : user.role === "HOD"
+        ? prisma.project.count({ where: { status: "PROPOSED", isDemo: user.isDemo } })
+        : Promise.resolve(0),
+  ]);
 
   let items: NavItem[];
   if (user.role === "STUDENT") {
@@ -18,14 +26,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       { href: "/student/project", label: "My Project", icon: "project" },
     ];
   } else if (user.role === "GUIDE") {
-    const pending = await prisma.submission.count({ where: { status: "PENDING", project: { guideId: user.id, isDemo: user.isDemo } } });
+    const pending = badge;
     items = [
       { href: "/guide", label: "Dashboard", icon: "dashboard", exact: true },
       { href: "/guide/reviews", label: "Review Queue", icon: "review", badge: pending },
       { href: "/guide/projects", label: "My Teams", icon: "project" },
     ];
   } else {
-    const proposals = await prisma.project.count({ where: { status: "PROPOSED", isDemo: user.isDemo } });
+    const proposals = badge;
     items = [
       { href: "/hod", label: "Dashboard", icon: "dashboard", exact: true },
       { href: "/hod/projects", label: "Projects", icon: "project", badge: proposals },
