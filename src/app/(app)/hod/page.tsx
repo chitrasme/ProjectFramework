@@ -11,8 +11,10 @@ export const metadata = { title: "HOD dashboard" };
 export default async function HodDashboard({ searchParams }: { searchParams: Promise<{ year?: string; denied?: string }> }) {
   const user = await requireUser("HOD");
   const sp = await searchParams;
-  const year = await resolveYear(user.isDemo, sp.year);
-  const years = await prisma.academicYear.findMany({ where: { isDemo: user.isDemo }, orderBy: { startDate: "desc" } });
+  const [year, years] = await Promise.all([
+    resolveYear(user.isDemo, sp.year),
+    prisma.academicYear.findMany({ where: { isDemo: user.isDemo }, orderBy: { startDate: "desc" } }),
+  ]);
   if (!year) return <div><PageHeader title="Department dashboard" /><Empty title="No academic year yet">Create one under Academic Years.</Empty></div>;
 
   const [projects, stages, guides, recent, studentsTotal] = await Promise.all([
@@ -23,9 +25,11 @@ export default async function HodDashboard({ searchParams }: { searchParams: Pro
     prisma.user.count({ where: { role: "STUDENT", isDemo: user.isDemo, active: true } }),
   ]);
   const active = projects.filter((p) => p.status === "ACTIVE" || p.status === "COMPLETED");
-  const summary = await summarizeProjects(active.map((p) => p.id));
-  const pendingReviews = await prisma.submission.count({ where: { status: "PENDING", project: { academicYearId: year.id } } });
-  const studentsInTeams = await prisma.teamMember.count({ where: { project: { academicYearId: year.id, status: { not: "REJECTED" } } } });
+  const [summary, pendingReviews, studentsInTeams] = await Promise.all([
+    summarizeProjects(active.map((p) => p.id)),
+    prisma.submission.count({ where: { status: "PENDING", project: { academicYearId: year.id } } }),
+    prisma.teamMember.count({ where: { project: { academicYearId: year.id, status: { not: "REJECTED" } } } }),
+  ]);
 
   const byStage = stages.map((s) => ({
     label: `${s.order}. ${s.name}`,
