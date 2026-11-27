@@ -117,3 +117,13 @@ describe("department timezone", () => {
     expect(toLocalInput(null)).toBe("");
   });
 });
+
+import { supabaseBaseUrl } from "../../src/lib/supabase-url";
+describe("supabaseBaseUrl", () => {
+  it("accepts the URL however it is pasted", () => {
+    for (const v of ["https://abcd.supabase.co", "https://abcd.supabase.co/", "https://abcd.supabase.co/rest/v1/", " https://abcd.supabase.co/rest/v1 ", '"https://abcd.supabase.co"', "abcd.supabase.co"]) {
+      expect(supabaseBaseUrl(v)).toBe("https://abcd.supabase.co");
+    }
+    expect(supabaseBaseUrl(undefined)).toBe("");
+  });
+});

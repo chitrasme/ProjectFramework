@@ -493,6 +493,20 @@ try {
     assert.ok(n);
   });
 
+  console.log("\nDemo data management");
+  await test("real HOD can remove and reload demo data", async () => {
+    await real.page.goto(`${BASE}/hod/backup`);
+    real.page.once("dialog", (d) => d.accept());
+    await btn(real.page, "Remove demo data").click();
+    await real.page.getByText("no demo data is loaded").waitFor();
+    assert.equal(await db.user.count({ where: { isDemo: true } }), 0);
+    assert.ok((await db.user.count({ where: { isDemo: false } })) >= 3, "real users must survive");
+    await real.page.reload();
+    await btn(real.page, "Load demo data").click();
+    await real.page.getByText("Demo data loaded").waitFor();
+    assert.equal(await db.user.count({ where: { isDemo: true } }), 13);
+  });
+
   if (SHOTS) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();

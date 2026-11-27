@@ -2,6 +2,7 @@ import "server-only";
 import { promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
+import { supabaseBaseUrl } from "./supabase-url";
 
 /**
  * File storage with two drivers:
@@ -23,7 +24,7 @@ function supa() {
   const keyVal = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const bucket = process.env.SUPABASE_BUCKET || "projecttrack";
   if (!url || !keyVal) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for supabase storage");
-  return { url: url.replace(/\/$/, ""), key: keyVal, bucket };
+  return { url: supabaseBaseUrl(url), key: keyVal.trim(), bucket };
 }
 
 export async function putFile(key: string, data: Buffer, contentType: string) {

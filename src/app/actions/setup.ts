@@ -46,11 +46,19 @@ export async function setupAction(_: ActionResult, form: FormData): Promise<Acti
     create: { name: d.name, email: d.email, role: "HOD", department: d.department, isDemo: false, passwordHash: await bcrypt.hash(d.password, 10) },
     update: { name: d.name, role: "HOD", department: d.department, isDemo: false, active: true, passwordHash: await bcrypt.hash(d.password, 10) },
   });
+  // The HOD account is the essential part; a demo-data problem must not block it.
+  let demoFailed = false;
   if (form.get("demo") === "on") {
-    await wipeDemo(prisma);
-    await seedDemo(prisma);
+    try {
+      await wipeDemo(prisma);
+      await seedDemo(prisma);
+    } catch (e) {
+      demoFailed = true;
+      console.error("Demo data could not be loaded during setup", e);
+      await wipeDemo(prisma).catch(() => {});
+    }
   }
-  await audit(hod, "system.setup", "User", hod.id, { demo: form.get("demo") === "on" });
+  await audit(hod, "system.setup", "User", hod.id, { demo: form.get("demo") === "on", demoFailed });
   await createSession(hod.id);
-  redirect("/hod");
+  redirect(demoFailed ? "/hod/backup?demo=failed" : "/hod");
 }
