@@ -3,7 +3,8 @@ import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { Card, PageHeader, Badge, fmtDate } from "@/components/ui";
 import { ActionForm, Submit } from "@/components/action-form";
-import { createYearAction, activateYearAction, archiveYearAction } from "@/app/actions/hod";
+import { createYearAction, activateYearAction, archiveYearAction, updateYearAction } from "@/app/actions/hod";
+import { toLocalInput } from "@/lib/time";
 
 export const metadata = { title: "Academic years" };
 
@@ -30,6 +31,19 @@ export default async function YearsPage() {
                 <td>{y.isActive ? <Badge tone="ok">Active</Badge> : y.archived ? <Badge>Archived</Badge> : <Badge tone="brand">Open</Badge>}</td>
                 <td>
                   <div className="flex justify-end gap-2">
+                    <details className="relative">
+                      <summary className="btn-secondary cursor-pointer list-none px-2 py-1 text-xs">Edit</summary>
+                      <div className="absolute right-0 z-20 mt-1 w-80 rounded-lg border border-border bg-surface p-3 text-left shadow-lg">
+                        <ActionForm action={updateYearAction} resetOnSuccess={false} className="space-y-2">
+                          <input type="hidden" name="yearId" value={y.id} />
+                          <div><label className="label">Label</label><input name="label" defaultValue={y.label} className="input" required /></div>
+                          <div><label className="label">Start date</label><input name="startDate" type="date" defaultValue={toLocalInput(y.startDate).slice(0, 10)} className="input" required /></div>
+                          <div><label className="label">End date</label><input name="endDate" type="date" defaultValue={toLocalInput(y.endDate).slice(0, 10)} className="input" required /></div>
+                          <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="spread" className="mt-1" /> <span>Spread all stage deadlines evenly between these dates (teams are notified)</span></label>
+                          <Submit className="btn-primary w-full text-xs">Save year</Submit>
+                        </ActionForm>
+                      </div>
+                    </details>
                     {!y.isActive && <form action={activateYearAction}><input type="hidden" name="yearId" value={y.id} /><button className="btn-secondary px-2 py-1 text-xs">Make active</button></form>}
                     {!y.isActive && <form action={archiveYearAction}><input type="hidden" name="yearId" value={y.id} /><button className="btn-secondary px-2 py-1 text-xs">{y.archived ? "Unarchive" : "Archive"}</button></form>}
                   </div>
