@@ -1,16 +1,27 @@
 import { DatabaseBackup } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { Card, PageHeader, fmtDate } from "@/components/ui";
+import { Card, PageHeader, fmtDate, Notice } from "@/components/ui";
+import { ActionForm, Submit } from "@/components/action-form";
+import { loadDemoAction, removeDemoAction } from "@/app/actions/demo";
 
 export const metadata = { title: "Backup" };
 
-export default async function BackupPage() {
+export default async function BackupPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
   const user = await requireUser("HOD");
+  const { demo } = await searchParams;
+  const demoUsers = user.isDemo ? 0 : await prisma.user.count({ where: { isDemo: true } });
   const last = await prisma.auditLog.findFirst({ where: { action: { in: ["backup.download", "backup.full"] }, isDemo: user.isDemo }, orderBy: { createdAt: "desc" }, include: { actor: { select: { name: true } } } });
   return (
     <div>
       <PageHeader title="Backup" subtitle="Keep copies of department records outside the application." />
+      {demo === "failed" && (
+        <div className="mb-6">
+          <Notice tone="warn">
+            Your HOD account was created, but the demo data could not be loaded. Check the Supabase settings in Vercel (SUPABASE_URL must look like https://abcd.supabase.co), redeploy, then use &quot;Load demo data&quot; below.
+          </Notice>
+        </div>
+      )}
       <div className="grid gap-6 md:grid-cols-2">
         <Card title="Download a records export">
           <p className="mb-4 text-sm text-muted">
@@ -27,6 +38,23 @@ export default async function BackupPage() {
           </ul>
         </Card>
       </div>
+      {!user.isDemo && (
+        <Card title="Demo accounts" className="mt-6">
+          <p className="mb-4 text-sm text-muted">
+            Sample HOD, guides, students and teams for training and trying features, kept fully separate from real records. Currently {demoUsers ? `${demoUsers} demo accounts exist` : "no demo data is loaded"}.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <ActionForm action={loadDemoAction} confirm={demoUsers ? "Reset the demo data to its starting state?" : undefined}>
+              <Submit pendingText="Loading…">{demoUsers ? "Reset demo data" : "Load demo data"}</Submit>
+            </ActionForm>
+            {demoUsers > 0 && (
+              <ActionForm action={removeDemoAction} confirm="Remove all demo accounts and demo data?">
+                <Submit className="btn-secondary" pendingText="Removing…">Remove demo data</Submit>
+              </ActionForm>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

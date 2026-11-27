@@ -6,6 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { DEFAULT_STAGES } from "./progress";
+import { supabaseBaseUrl } from "./supabase-url";
 
 const DAY = 86_400_000;
 export const DEMO_PASSWORD = "Demo@123";
@@ -29,7 +30,7 @@ async function demoPdf(title: string, lines: string[]) {
 async function storeLocal(key: string, data: Buffer) {
   // Seed writes demo files to local disk. With STORAGE_DRIVER=supabase they are uploaded instead.
   if ((process.env.STORAGE_DRIVER || "local") === "supabase") {
-    const url = process.env.SUPABASE_URL!.replace(/\/$/, "");
+    const url = supabaseBaseUrl(process.env.SUPABASE_URL);
     const bucket = process.env.SUPABASE_BUCKET || "projecttrack";
     const res = await fetch(`${url}/storage/v1/object/${bucket}/${key}`, {
       method: "POST",
