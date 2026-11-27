@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { audit } from "@/lib/audit";
 import { notify, projectMemberIds } from "@/lib/notify";
-import { parseLocalInput } from "@/lib/time";
+import { parseLocalInput, spreadDeadlines, toLocalInput } from "@/lib/time";
 import { DEFAULT_STAGES } from "@/lib/progress";
 import type { ActionResult } from "@/components/action-form";
 
@@ -356,4 +356,34 @@ export async function archiveYearAction(form: FormData) {
   await prisma.academicYear.update({ where: { id }, data: { archived: !year.archived } });
   await audit(user, year.archived ? "year.unarchive" : "year.archive", "AcademicYear", id, { label: year.label });
   revalidatePath("/hod/years");
+}
+
+export async function updateYearAction(_: ActionResult, form: FormData): Promise<ActionResult> {
+  const user = await hod();
+  const id = String(form.get("yearId"));
+  const year = await prisma.academicYear.findUnique({ where: { id }, include: { stages: { orderBy: { order: "asc" } } } });
+  if (!year || year.isDemo !== user.isDemo) return { error: "Year not found." };
+  const label = String(form.get("label") ?? "").trim();
+  const start = parseLocalInput(String(form.get("startDate") ?? "") + "T00:00");
+  const end = parseLocalInput(String(form.get("endDate") ?? ""));
+  if (!/^[\w\s-]{4,30}$/.test(label)) return { error: 'Enter a label such as "2026-27".' };
+  if (!start || !end || end <= start) return { error: "The end date must be after the start date." };
+  const clash = await prisma.academicYear.findFirst({ where: { label, isDemo: user.isDemo, id: { not: id } } });
+  if (clash) return { error: "Another year already uses that label." };
+
+  const spread = form.get("spread") === "on";
+  const active = year.stages.filter((s) => s.isActive);
+  const deadlines = spread ? spreadDeadlines(active.length, start, end) : [];
+  await prisma.$transaction([
+    prisma.academicYear.update({ where: { id }, data: { label, startDate: start, endDate: end } }),
+    ...(spread ? active.map((s, i) => prisma.stage.update({ where: { id: s.id }, data: { deadline: deadlines[i] } })) : []),
+  ]);
+  if (spread) {
+    await prisma.reminderLog.deleteMany({ where: { stageId: { in: active.map((s) => s.id) } } });
+    const members = await prisma.teamMember.findMany({ where: { project: { academicYearId: id, status: "ACTIVE" } }, select: { userId: true } });
+    await notify(members.map((m) => m.userId), { title: "Project schedule updated", body: `Stage deadlines for ${label} now run from ${start.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })} to ${end.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}.`, link: "/calendar", kind: "DEADLINE" });
+  }
+  await audit(user, "year.update", "AcademicYear", id, { label, start: start.toISOString(), end: end.toISOString(), spreadDeadlines: spread });
+  revalidatePath("/hod", "layout");
+  return { ok: spread ? `Saved. ${active.length} stage deadlines spread from ${toLocalInput(start).slice(0, 10)} to ${toLocalInput(end).slice(0, 10)}; teams notified. Fine-tune them under Stages & Deadlines.` : "Saved. Stage deadlines were not changed." };
 }

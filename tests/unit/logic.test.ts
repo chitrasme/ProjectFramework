@@ -127,3 +127,16 @@ describe("supabaseBaseUrl", () => {
     expect(supabaseBaseUrl(undefined)).toBe("");
   });
 });
+
+import { spreadDeadlines } from "../../src/lib/time";
+describe("spreadDeadlines", () => {
+  it("spaces deadlines evenly and puts the last one on the end date at 17:00 IST", () => {
+    const start = parseLocalInput("2026-12-01T00:00", "Asia/Kolkata")!;
+    const end = parseLocalInput("2027-03-31", "Asia/Kolkata")!;
+    const d = spreadDeadlines(14, start, end, "Asia/Kolkata");
+    expect(d).toHaveLength(14);
+    expect(toLocalInput(d[13], "Asia/Kolkata")).toBe("2027-03-31T17:00");
+    expect(toLocalInput(d[0], "Asia/Kolkata")).toBe("2026-12-09T17:00");
+    for (let i = 1; i < d.length; i++) expect(d[i].getTime()).toBeGreaterThan(d[i - 1].getTime());
+  });
+});

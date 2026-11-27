@@ -31,3 +31,16 @@ export function toLocalInput(d: Date | null | undefined, tz = APP_TZ) {
   const shifted = new Date(d.getTime() + offsetMinutes(d, tz) * 60000);
   return shifted.toISOString().slice(0, 16);
 }
+
+/**
+ * Evenly spaced deadlines for `count` stages between `start` and `end`: stage i (1-based) falls
+ * i/count of the way through, at 17:00 department time, so the last stage is due on the end date.
+ */
+export function spreadDeadlines(count: number, start: Date, end: Date, tz = APP_TZ): Date[] {
+  const span = end.getTime() - start.getTime();
+  return Array.from({ length: count }, (_, i) => {
+    const at = new Date(start.getTime() + (span * (i + 1)) / count);
+    const day = toLocalInput(at, tz).slice(0, 10);
+    return parseLocalInput(`${day}T17:00`, tz)!;
+  });
+}

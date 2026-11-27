@@ -470,14 +470,33 @@ try {
   });
   await test("HOD creates a new academic year copied from the current one", async () => {
     await real.page.goto(`${BASE}/hod/years`);
-    await real.page.fill("input[name=label]", "2027-28");
-    await real.page.fill("input[name=startDate]", "2027-06-01");
-    await real.page.fill("input[name=endDate]", "2028-05-31");
+    const form = real.page.locator("form", { has: real.page.getByRole("button", { name: "Create year" }) });
+    await form.locator("input[name=label]").fill("2027-28");
+    await form.locator("input[name=startDate]").fill("2027-06-01");
+    await form.locator("input[name=endDate]").fill("2028-05-31");
     await btn(real.page, "Create year").click();
-    await status(real.page).waitFor();
+    await form.getByRole("status").waitFor();
     const y = await db.academicYear.findFirstOrThrow({ where: { label: "2027-28", isDemo: false }, include: { stages: true } });
     assert.equal(y.stages.length, 14);
     assert.equal(y.isActive, false);
+  });
+
+  await test("HOD edits the year's dates and spreads stage deadlines across them", async () => {
+    const y = await db.academicYear.findFirstOrThrow({ where: { isDemo: false, isActive: true } });
+    await real.page.goto(`${BASE}/hod/years`);
+    const row = real.page.locator("tr", { hasText: y.label });
+    await row.locator("summary", { hasText: "Edit" }).click();
+    await row.locator("input[name=label]").fill("2026-27 Batch");
+    await row.locator("input[name=startDate]").fill("2026-12-01");
+    await row.locator("input[name=endDate]").fill("2027-03-31");
+    await row.locator("input[name=spread]").check();
+    await row.getByRole("button", { name: "Save year" }).click();
+    await row.getByRole("status").waitFor();
+    const after = await db.academicYear.findUniqueOrThrow({ where: { id: y.id }, include: { stages: { where: { isActive: true }, orderBy: { order: "asc" } } } });
+    assert.equal(after.label, "2026-27 Batch");
+    assert.equal(after.startDate.toISOString(), "2026-11-30T18:30:00.000Z");
+    assert.equal(after.stages.at(-1).deadline.toISOString(), "2027-03-31T11:30:00.000Z");
+    assert.ok(after.stages.every((s) => s.deadline >= after.startDate && s.deadline <= after.endDate));
   });
 
   console.log("\nReminders");
